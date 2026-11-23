@@ -9,7 +9,17 @@ Gold customer lookup API built with FastAPI.
 4. Copy .env.example to .env
 
 ## Run
-Added in feature/api-server.
+```
+uvicorn main:app --reload
+```
+Docs: http://localhost:8000/docs
+
+Routes:
+- GET /health
+- GET /customers (optional filter: ?value_tier=High|Medium|Standard)
+- GET /customers/{customer_id}
+
+The data file path comes from DATABASE_LOCATION and defaults to customers.json. All records are mock data.
 
 ## Test
 Sample curl commands added in feature/client-and-submission.
