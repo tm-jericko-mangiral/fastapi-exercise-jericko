@@ -85,7 +85,7 @@ def test_search_route_returns_chunk_from_matching_document(client):
 
 
 def test_search_route_limits_results_to_top_k(client):
-    response = client.get("/documents/search", params={"q": "the", "top_k": 2})
+    response = client.get("/documents/search", params={"q": "annual", "top_k": 2})
 
     assert len(response.json()) == 2
 
