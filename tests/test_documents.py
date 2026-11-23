@@ -37,7 +37,7 @@ def test_split_into_chunks_overlaps_consecutive_chunks():
 
 
 def test_build_chunks_names_chunks_by_document_and_index():
-    documents = [{"document_id": "guide", "text": "x" * 300}]
+    documents = [{"document_id": "guide", "text": "x" * 700}]
 
     chunks = build_chunks(documents)
 
@@ -77,11 +77,11 @@ def test_documents_route_lists_documents_with_chunk_counts(client):
 
 
 def test_search_route_returns_chunk_from_matching_document(client):
-    response = client.get("/documents/search", params={"q": "dormant"})
+    response = client.get("/documents/search", params={"q": "lounge"})
 
     results = response.json()
     assert response.status_code == 200
-    assert results[0]["document_id"] == "savings-account-guide"
+    assert results[0]["document_id"] == "astra-travel-miles-platinum"
 
 
 def test_search_route_limits_results_to_top_k(client):

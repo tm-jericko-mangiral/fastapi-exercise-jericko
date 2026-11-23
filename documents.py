@@ -2,8 +2,8 @@ import json
 import re
 from pathlib import Path
 
-CHUNK_SIZE = 200
-CHUNK_OVERLAP = 40
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 100
 
 
 def load_documents(path):

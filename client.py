@@ -23,7 +23,7 @@ def main():
     get_endpoint("/customers/101")
     get_endpoint("/customers/999")
     get_endpoint("/documents")
-    get_endpoint("/documents/search?q=dormant")
+    get_endpoint("/documents/search?q=lounge")
 
 
 if __name__ == "__main__":
