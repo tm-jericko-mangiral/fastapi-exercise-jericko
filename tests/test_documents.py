@@ -5,6 +5,11 @@ from documents import build_chunks, search_chunks, split_into_chunks
 from main import app
 
 DOCUMENT_COUNT = 3
+CHUNK_SIZE = 200
+OVERLAP = 40
+TEXT_LENGTH = 500
+TWO_CHUNK_TEXT_LENGTH = 700
+ROUTE_TOP_K = 2
 SAMPLE_CHUNKS = [
     {"chunk_id": "a-0", "document_id": "a", "text": "lost card hotline"},
     {"chunk_id": "a-1", "document_id": "a", "text": "card annual fee"},
@@ -28,16 +33,16 @@ def test_split_into_chunks_keeps_short_text_in_one_chunk():
 
 
 def test_split_into_chunks_overlaps_consecutive_chunks():
-    text = "".join(str(number % 10) for number in range(500))
+    text = "".join(str(number % 10) for number in range(TEXT_LENGTH))
 
-    chunks = split_into_chunks(text, chunk_size=200, overlap=40)
+    chunks = split_into_chunks(text, chunk_size=CHUNK_SIZE, overlap=OVERLAP)
 
     assert [len(chunk) for chunk in chunks] == [200, 200, 180]
-    assert chunks[0][-40:] == chunks[1][:40]
+    assert chunks[0][-OVERLAP:] == chunks[1][:OVERLAP]
 
 
 def test_build_chunks_names_chunks_by_document_and_index():
-    documents = [{"document_id": "guide", "text": "x" * 700}]
+    documents = [{"document_id": "guide", "text": "x" * TWO_CHUNK_TEXT_LENGTH}]
 
     chunks = build_chunks(documents)
 
@@ -85,9 +90,11 @@ def test_search_route_returns_chunk_from_matching_document(client):
 
 
 def test_search_route_limits_results_to_top_k(client):
-    response = client.get("/documents/search", params={"q": "annual", "top_k": 2})
+    response = client.get(
+        "/documents/search", params={"q": "annual", "top_k": ROUTE_TOP_K}
+    )
 
-    assert len(response.json()) == 2
+    assert len(response.json()) == ROUTE_TOP_K
 
 
 def test_search_route_requires_a_query(client):
@@ -97,6 +104,8 @@ def test_search_route_requires_a_query(client):
 
 
 def test_search_route_rejects_top_k_below_one(client):
-    response = client.get("/documents/search", params={"q": "card", "top_k": 0})
+    response = client.get(
+        "/documents/search", params={"q": "card", "top_k": 0}
+    )
 
     assert response.status_code == 422

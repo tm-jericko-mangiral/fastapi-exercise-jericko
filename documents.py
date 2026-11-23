@@ -7,11 +7,21 @@ CHUNK_OVERLAP = 100
 
 
 def load_documents(path):
+    """Read the documents from a JSON file.
+
+    :param path: Location of the JSON file.
+    :return: List of documents with document_id, title and text.
+    """
     with Path(path).open("r", encoding="utf-8") as file:
         return json.load(file)
 
 
 def build_chunks(documents):
+    """Split every document into overlapping chunks.
+
+    :param documents: Documents with document_id and text.
+    :return: Chunks with chunk_id, document_id, chunk_index and text.
+    """
     return [
         {
             "chunk_id": f"{document['document_id']}-{chunk_index}",
@@ -27,17 +37,60 @@ def build_chunks(documents):
 
 
 def split_into_chunks(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    """Split text into fixed-length character chunks that overlap.
+
+    :param text: Text to split.
+    :param chunk_size: Number of characters in each chunk.
+    :param overlap: Number of characters shared by consecutive chunks.
+    :return: List of chunk strings, empty when the text is empty.
+    """
     if not text:
         return []
     step = chunk_size - overlap
-    last_start = max(len(text) - overlap, 1)
+    start_limit = max(len(text) - overlap, 1)
     return [
         text[start:start + chunk_size]
-        for start in range(0, last_start, step)
+        for start in range(0, start_limit, step)
     ]
 
 
+def summarize_documents(documents, chunks):
+    """Describe each document with its number of chunks.
+
+    :param documents: Documents with document_id and title.
+    :param chunks: Chunks built from the documents.
+    :return: List with document_id, title and chunk_count per document.
+    """
+    return [
+        {
+            "document_id": document["document_id"],
+            "title": document["title"],
+            "chunk_count": count_chunks(chunks, document["document_id"]),
+        }
+        for document in documents
+    ]
+
+
+def count_chunks(chunks, document_id):
+    """Count the chunks that belong to one document.
+
+    :param chunks: Chunks with a document_id.
+    :param document_id: Document to count chunks for.
+    :return: Number of chunks of that document.
+    """
+    return sum(1 for chunk in chunks if chunk["document_id"] == document_id)
+
+
 def search_chunks(chunks, query, top_k):
+    """Rank chunks by how many query words they contain.
+
+    Chunks that contain no query word are left out.
+
+    :param chunks: Chunks to search.
+    :param query: Search text.
+    :param top_k: Maximum number of chunks to return.
+    :return: Best matching chunks with a score added, best first.
+    """
     query_terms = tokenize(query)
     scored_chunks = [
         {**chunk, "score": score_chunk(chunk, query_terms)}
@@ -53,24 +106,20 @@ def search_chunks(chunks, query, top_k):
     return ranked_chunks[:top_k]
 
 
-def summarize_documents(documents, chunks):
-    return [
-        {
-            "document_id": document["document_id"],
-            "title": document["title"],
-            "chunk_count": count_chunks(chunks, document["document_id"]),
-        }
-        for document in documents
-    ]
-
-
-def count_chunks(chunks, document_id):
-    return sum(1 for chunk in chunks if chunk["document_id"] == document_id)
-
-
 def score_chunk(chunk, query_terms):
+    """Count the query words found in a chunk.
+
+    :param chunk: Chunk with text.
+    :param query_terms: Set of lowercase query words.
+    :return: Number of query words the chunk contains.
+    """
     return len(query_terms & tokenize(chunk["text"]))
 
 
 def tokenize(text):
+    """Lowercase text and collect its distinct words.
+
+    :param text: Text to split into words.
+    :return: Set of lowercase words.
+    """
     return set(re.findall(r"\w+", text.lower()))
