@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from main import app
 
 CUSTOMER_COUNT = 6
+CUSTOMERS_PER_TIER = 2
+HIGH_TIER_CUSTOMER_IDS = [101, 102]
 EXISTING_CUSTOMER_ID = 101
 MISSING_CUSTOMER_ID = 999
 
@@ -33,7 +35,7 @@ def test_customers_filter_returns_only_matching_tier(client, value_tier):
 
     customers = response.json()
     assert response.status_code == 200
-    assert len(customers) == 2
+    assert len(customers) == CUSTOMERS_PER_TIER
     assert {customer["value_tier"] for customer in customers} == {value_tier}
 
 
@@ -41,7 +43,7 @@ def test_customers_filter_ignores_case(client):
     response = client.get("/customers", params={"value_tier": "high"})
 
     customer_ids = [customer["customer_id"] for customer in response.json()]
-    assert customer_ids == [101, 102]
+    assert customer_ids == HIGH_TIER_CUSTOMER_IDS
 
 
 def test_customers_filter_with_unknown_tier_returns_empty_list(client):

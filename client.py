@@ -8,6 +8,11 @@ BASE_URL = f"{ENDPOINT_URL}:{ENDPOINT_PORT}"
 
 
 def get_endpoint(route: str):
+    """Send a GET request to the API and print the response.
+
+    :param route: Path and query string, for example /customers/101.
+    :return: The response from the API.
+    """
     full_route = f"{BASE_URL}{route}"
     print(f"GET {full_route}")
 
@@ -18,6 +23,7 @@ def get_endpoint(route: str):
 
 
 def main():
+    """Call the health, customer and document routes in turn."""
     get_endpoint("/health")
     get_endpoint("/customers?value_tier=High")
     get_endpoint("/customers/101")
