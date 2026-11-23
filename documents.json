@@ -1,0 +1,17 @@
+[
+  {
+    "document_id": "savings-account-guide",
+    "title": "Everyday Savings Account Guide",
+    "text": "The Everyday Savings Account has no maintaining balance and a minimum opening deposit of 500 pesos. Interest is credited monthly based on the average daily balance. Customers can deposit and withdraw at any branch or ATM, and can transfer funds online at no charge. Dormant accounts with no activity for twelve months are flagged and may be reactivated with a valid ID at any branch. Statements are issued monthly by email."
+  },
+  {
+    "document_id": "credit-card-guide",
+    "title": "Rewards Credit Card Guide",
+    "text": "The Rewards Credit Card earns one point for every 50 pesos spent on retail purchases. Points can be redeemed for statement credit or travel vouchers and expire after two years. The annual fee is waived for the first year and for any year with at least 120000 pesos in spending. Lost or stolen cards should be reported immediately through the hotline so the card can be blocked. Payments are due twenty days after the statement date."
+  },
+  {
+    "document_id": "personal-loan-guide",
+    "title": "Personal Loan Guide",
+    "text": "The Personal Loan offers amounts from 50000 to 1000000 pesos with terms of 12 to 60 months. Applicants need proof of income, a valid government ID and at least six months of employment. Approval usually takes three to five business days after documents are complete. Early repayment is allowed with a fee of two percent of the remaining balance. Late payments are charged a monthly penalty until the account is current."
+  }
+]
