@@ -1,6 +1,35 @@
 # fastapi-exercise-jericko
 
-Gold customer lookup API built with FastAPI.
+Gold customer lookup API built with FastAPI, for the EC bootcamp FastAPI lab.
+
+## Scenario
+In my data engineering capstone, customer records from Core Banking and CRM are cleaned and merged into a Gold customer table (`gold_customers`) in PostgreSQL. That project has no customer-facing API.
+
+This lab builds the missing piece in small form: a read-only API that lets a client look up Gold customers without touching the data layer directly. A client can list customers, filter them by value tier, or fetch one customer by ID.
+
+The lab uses GET routes only. It is not connected to the capstone pipelines.
+
+## Data Source
+The records in `customers.json` are mock data modeled on the columns of the capstone's `gold_customers` table.
+
+- All values are fake. Emails use `example.com` and phone numbers are placeholders.
+- The columns mirror the Gold table, except the internal `_loaded_at` column.
+- `customer_id` is an integer here, while the Gold table stores it as text.
+- `value_tier` uses the real Gold values: `High`, `Medium` and `Standard`.
+- `kyc_level`, `tier`, `segment` and `status` are not constrained in Gold, so their values are invented.
+- The API reads the JSON file instead of PostgreSQL. The path comes from `DATABASE_LOCATION`.
+
+## Project Structure
+```
+fastapi-exercise-jericko/
+├── main.py            FastAPI app with the health and customer routes
+├── customers.json     Mock Gold customer records, keyed by customer_id
+├── client.py          Python client that calls the API with requests
+├── requirements.txt   Pinned dependencies
+├── .env.example       Template for DATABASE_LOCATION, ENDPOINT_URL, ENDPOINT_PORT
+└── README.md
+```
+Local only, not tracked: `.env` and `.venv/`.
 
 ## Setup
 1. python -m venv .venv
