@@ -39,7 +39,7 @@ Local only, not tracked: `.env` and `.venv/`.
 
 ## Run
 ```
-uvicorn main:app --reload
+uvicorn main:app --reload --port 8000
 ```
 Docs: http://localhost:8000/docs
 
