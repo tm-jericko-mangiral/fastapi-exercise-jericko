@@ -2,9 +2,18 @@ import json
 import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+
+from documents import (
+    build_chunks,
+    load_documents,
+    search_chunks,
+    summarize_documents,
+)
 
 CUSTOMERS_PATH = Path(os.environ.get("DATABASE_LOCATION", "customers.json"))
+DOCUMENTS_PATH = Path(os.environ.get("DOCUMENTS_LOCATION", "documents.json"))
+DEFAULT_TOP_K = 3
 
 app = FastAPI()
 
@@ -33,6 +42,16 @@ def get_customer(customer_id: int):
     return customer
 
 
+@app.get("/documents")
+def get_documents():
+    return summarize_documents(DOCUMENTS, CHUNKS)
+
+
+@app.get("/documents/search")
+def search_documents(q: str, top_k: int = Query(DEFAULT_TOP_K, ge=1)):
+    return search_chunks(CHUNKS, q, top_k)
+
+
 def filter_by_value_tier(customers, value_tier):
     return [
         customer
@@ -51,3 +70,5 @@ def load_customers():
 
 
 CUSTOMERS = load_customers()
+DOCUMENTS = load_documents(DOCUMENTS_PATH)
+CHUNKS = build_chunks(DOCUMENTS)

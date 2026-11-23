@@ -19,17 +19,38 @@ The records in `customers.json` are mock data modeled on the columns of the caps
 - `kyc_level`, `tier`, `segment` and `status` are not constrained in Gold, so their values are invented.
 - The API reads the JSON file instead of PostgreSQL. The path comes from `DATABASE_LOCATION`.
 
+## Additional use case: document ingestion
+This is an additional use case for the GenAI capstone preparation, where the chatbot will answer questions from ingested documents (RAG). It is separate from the customer lookup above and kept small.
+
+- `documents.json` holds three sample credit card product documents (Astra Travel Miles Platinum, Build+ Student & Starter and Everyday Max Cashback), one entry per document. There are no PDF files.
+- `documents.py` splits each document into overlapping character chunks (500 characters with 100 overlap), the same idea as the capstone's PDF chunking. Chunk IDs are `<document_id>-<chunk_index>`.
+- Search ranks chunks by how many query words they contain. This keyword score stands in for the vector similarity search a real RAG setup would use.
+- There are no embeddings and no vector database here.
+
+Routes:
+- GET /documents (lists documents with their chunk counts)
+- GET /documents/search?q=...&top_k=3 (returns the best matching chunks with their source document and score)
+
+```
+curl.exe "http://localhost:8000/documents/search?q=lounge"
+```
+
+The data file path comes from `DOCUMENTS_LOCATION` and defaults to `documents.json`.
+
 ## Project Structure
 ```
 fastapi-exercise-jericko/
 ├── main.py            FastAPI app with the health and customer routes
 ├── customers.json     Mock Gold customer records, keyed by customer_id
+├── documents.py       Chunking and keyword search for the document use case
+├── documents.json     Sample card product documents for the document use case
 ├── client.py          Python client that calls the API with requests
 ├── tests/
-│   └── test_api.py    pytest tests for the routes
+│   ├── test_api.py        pytest tests for the customer routes
+│   └── test_documents.py  pytest tests for chunking, search and document routes
 ├── pytest.ini         pytest settings (test folder, import path)
 ├── requirements.txt   Pinned dependencies
-├── .env.example       Template for DATABASE_LOCATION, ENDPOINT_URL, ENDPOINT_PORT
+├── .env.example       Template for DATABASE_LOCATION, DOCUMENTS_LOCATION, ENDPOINT_URL, ENDPOINT_PORT
 └── README.md
 ```
 Local only, not tracked: `.env`, `.venv/` and `.pytest_cache/`.
@@ -91,11 +112,11 @@ Install the test dependencies once, then run pytest from the repo root with `.ve
 python -m pip install pytest httpx
 python -m pytest
 ```
-The tests in `tests/test_api.py` call the routes through FastAPI's `TestClient`, so the server does not need to be running. They cover the health route, the customer list and its `value_tier` filter (including case and unknown values), lookup by ID, the 404 for a missing customer and the 422 for a non-integer ID.
+The tests call the routes through FastAPI's `TestClient`, so the server does not need to be running. `tests/test_api.py` covers the health route, the customer list and its `value_tier` filter (including case and unknown values), lookup by ID, the 404 for a missing customer and the 422 for a non-integer ID. `tests/test_documents.py` covers chunking, search ranking and the document routes.
 
 ## Python client
 With the server running, in a second terminal with `.venv` active:
 ```
 python client.py
 ```
-It calls `/health`, `/customers?value_tier=High`, `/customers/101` and `/customers/999`, and prints the status code and JSON for each. The base URL comes from `ENDPOINT_URL` and `ENDPOINT_PORT`, defaulting to `http://localhost` and `8000`.
+It calls `/health`, `/customers?value_tier=High`, `/customers/101`, `/customers/999`, `/documents` and `/documents/search?q=lounge`, and prints the status code and JSON for each. The base URL comes from `ENDPOINT_URL` and `ENDPOINT_PORT`, defaulting to `http://localhost` and `8000`.
