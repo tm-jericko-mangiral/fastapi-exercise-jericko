@@ -22,6 +22,8 @@ def main():
     get_endpoint("/customers?value_tier=High")
     get_endpoint("/customers/101")
     get_endpoint("/customers/999")
+    get_endpoint("/documents")
+    get_endpoint("/documents/search?q=dormant")
 
 
 if __name__ == "__main__":
