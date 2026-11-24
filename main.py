@@ -59,6 +59,8 @@ CompletenessScore = Annotated[
     float,
     Field(ge=0, le=MAX_COMPLETENESS_SCORE, allow_inf_nan=False),
 ]
+Age = Annotated[StrictInt, Field(ge=0, le=MAX_AGE)]
+ValueTier = Literal["High", "Medium", "Standard"]
 
 app = FastAPI()
 
@@ -103,7 +105,7 @@ class NewCustomer(BaseModel):
     email: EmailAddress
     first_name: RequiredText
     last_name: RequiredText
-    age: Annotated[StrictInt, Field(ge=0, le=MAX_AGE)]
+    age: Age
     phone: RequiredText
     city: RequiredText
     province: RequiredText
@@ -119,8 +121,50 @@ class NewCustomer(BaseModel):
     marketing_opt_in: StrictBool
     total_relationship_balance: NonNegativeNumber
     average_daily_balance: NonNegativeNumber
-    value_tier: Literal["High", "Medium", "Standard"]
+    value_tier: ValueTier
     completeness_score: CompletenessScore
+
+
+class CustomerChanges(BaseModel):
+    """Request body for changing a customer.
+
+    Every field is optional and has the same rules as when creating, but at
+    least one must be sent. customer_id, as_of_date and unknown fields are
+    rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_system: RequiredText | None = None
+    email: EmailAddress | None = None
+    first_name: RequiredText | None = None
+    last_name: RequiredText | None = None
+    age: Age | None = None
+    phone: RequiredText | None = None
+    city: RequiredText | None = None
+    province: RequiredText | None = None
+    postal_code: RequiredText | None = None
+    country: RequiredText | None = None
+    created_at: datetime | None = None
+    tenure_years: NonNegativeNumber | None = None
+    tenure_category: RequiredText | None = None
+    kyc_level: RequiredText | None = None
+    tier: RequiredText | None = None
+    segment: RequiredText | None = None
+    status: RequiredText | None = None
+    marketing_opt_in: StrictBool | None = None
+    total_relationship_balance: NonNegativeNumber | None = None
+    average_daily_balance: NonNegativeNumber | None = None
+    value_tier: ValueTier | None = None
+    completeness_score: CompletenessScore | None = None
+
+    @model_validator(mode="after")
+    def require_a_value_to_change(self):
+        """Reject an empty body and null values."""
+        changes = self.model_dump(exclude_unset=True)
+        if not changes or None in changes.values():
+            raise ValueError("Send at least one field, each with a value")
+        return self
 
 
 @app.get("/health")
@@ -181,6 +225,35 @@ def add_customer(payload: NewCustomer):
         "as_of_date": date.today().isoformat(),
     }
     CUSTOMERS[customer_id] = customer
+    save_customers()
+    return customer
+
+
+@app.patch("/customers/{customer_id}")
+def change_customer(customer_id: int, payload: CustomerChanges):
+    """Change one or more fields of a customer and save the working copy.
+
+    customer_id and as_of_date stay as they are.
+
+    :param customer_id: Integer ID of the customer.
+    :param payload: Fields to change.
+    :return: The updated customer record.
+    :raises HTTPException: 404 when the customer does not exist, 409 when
+        another customer already has the new email.
+    """
+    customer = CUSTOMERS.get(customer_id)
+    if customer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    changes = payload.model_dump(mode="json", exclude_unset=True)
+    new_email = changes.get("email")
+    if new_email and is_email_taken(
+        CUSTOMERS.values(), new_email, ignore_customer_id=customer_id
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Customer with email '{new_email}' already exists",
+        )
+    customer.update(changes)
     save_customers()
     return customer
 
@@ -312,17 +385,20 @@ def filter_by_value_tier(customers, value_tier):
     ]
 
 
-def is_email_taken(customers, email):
+def is_email_taken(customers, email, ignore_customer_id=None):
     """Check whether a customer already has this email.
 
     Emails are compared ignoring case.
 
     :param customers: Customer records.
     :param email: Email to check.
-    :return: True when a customer has the same email.
+    :param ignore_customer_id: ID of a customer to skip, such as the one
+        being changed, so they can keep their own email.
+    :return: True when another customer has the same email.
     """
     return any(
         customer["email"].casefold() == email.casefold()
+        and customer["customer_id"] != ignore_customer_id
         for customer in customers
     )
 
