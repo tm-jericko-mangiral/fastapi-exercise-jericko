@@ -169,3 +169,21 @@ def has_duplicate(documents, title, document_id):
         or document["title"].casefold() == title.casefold()
         for document in documents
     )
+
+
+def is_title_used_by_other(documents, title, document_id):
+    """Check whether a different document already has this title.
+
+    Titles are compared ignoring case. The document being changed is skipped,
+    so it can keep its title or only change the case.
+
+    :param documents: Documents with document_id and title.
+    :param title: Title to check.
+    :param document_id: ID of the document being changed.
+    :return: True when another document has the same title.
+    """
+    return any(
+        document["document_id"] != document_id
+        and document["title"].casefold() == title.casefold()
+        for document in documents
+    )

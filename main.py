@@ -3,12 +3,13 @@ import os
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Query, status
-from pydantic import BaseModel, StringConstraints
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from documents import (
     build_chunks,
     find_document,
     has_duplicate,
+    is_title_used_by_other,
     load_documents,
     make_document_id,
     search_chunks,
@@ -38,6 +39,26 @@ class NewDocument(BaseModel):
 
     title: DocumentTitle
     text: DocumentText
+
+
+class DocumentChanges(BaseModel):
+    """Request body for changing a document.
+
+    Only title and text are accepted, and at least one must be sent.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: DocumentTitle | None = None
+    text: DocumentText | None = None
+
+    @model_validator(mode="after")
+    def require_a_value_to_change(self):
+        """Reject an empty body and null values."""
+        changes = self.model_dump(exclude_unset=True)
+        if not changes or None in changes.values():
+            raise ValueError("Send title, text or both, each with a value")
+        return self
 
 
 @app.get("/health")
@@ -125,6 +146,35 @@ def get_document(document_id: str):
     if document is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
     return document
+
+
+@app.patch("/documents/{document_id}")
+def change_document(document_id: str, payload: DocumentChanges):
+    """Change the title, the text or both of a document.
+
+    The document ID stays the same. The chunks are rebuilt.
+
+    :param document_id: ID of the document.
+    :param payload: New title and/or new text.
+    :return: The document's ID, title and chunk count.
+    :raises HTTPException: 404 when the document does not exist, 409 when
+        another document already has the new title.
+    """
+    document = find_document(DOCUMENTS, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    changes = payload.model_dump(exclude_unset=True)
+    new_title = changes.get("title")
+    if new_title and is_title_used_by_other(
+        DOCUMENTS, new_title, document_id
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Document '{new_title}' already exists",
+        )
+    document.update(changes)
+    save_documents_and_rebuild_chunks()
+    return summarize_documents([document], CHUNKS)[0]
 
 
 def filter_by_value_tier(customers, value_tier):
