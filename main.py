@@ -258,6 +258,21 @@ def change_customer(customer_id: int, payload: CustomerChanges):
     return customer
 
 
+@app.delete(
+    "/customers/{customer_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_customer(customer_id: int):
+    """Delete a customer and save the working copy.
+
+    :param customer_id: Integer ID of the customer.
+    :raises HTTPException: 404 when the customer does not exist.
+    """
+    if customer_id not in CUSTOMERS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    del CUSTOMERS[customer_id]
+    save_customers()
+
+
 @app.get("/documents")
 def get_documents():
     """List the documents with their chunk counts."""
