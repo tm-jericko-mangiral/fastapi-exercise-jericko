@@ -1,124 +1,239 @@
-# fastapi-II-exercise-jericko
+# FastAPI Exercises I & II
 
-# fastapi-exercise-jericko
+A FastAPI-based customer lookup and document management API developed as part of the EC Bootcamp exercises. The project progresses from basic API endpoints to CRUD operations, JSON-based persistence, and simple document search.
 
-Gold customer lookup API built with FastAPI, for the EC bootcamp FastAPI lab.
+## Project Overview
 
-## Scenario
-In my data engineering capstone, customer records from Core Banking and CRM are cleaned and merged into a Gold customer table (`gold_customers`) in PostgreSQL. That project has no customer-facing API.
+This repository contains two stages of FastAPI exercises.
 
-This lab builds the missing piece in small form: a read-only API that lets a client look up Gold customers without touching the data layer directly. A client can list customers, filter them by value tier, or fetch one customer by ID.
+### FastAPI I — Customer Lookup API
 
-The lab uses GET routes only. It is not connected to the capstone pipelines.
+The first exercise introduces the fundamentals of building REST API endpoints using FastAPI.
 
-## Data Source
-The records in `customers.json` are mock data modeled on the columns of the capstone's `gold_customers` table.
+Features:
 
-- All values are fake. Emails use `example.com` and phone numbers are placeholders.
-- The columns mirror the Gold table, except the internal `_loaded_at` column.
-- `customer_id` is an integer here, while the Gold table stores it as text.
-- `value_tier` uses the real Gold values: `High`, `Medium` and `Standard`.
-- `kyc_level`, `tier`, `segment` and `status` are not constrained in Gold, so their values are invented.
-- The API reads the JSON file instead of PostgreSQL. The path comes from `DATABASE_LOCATION`.
+- Health check endpoint.
+- Retrieve all customers.
+- Filter customers by value tier.
+- Retrieve an individual customer using their ID.
+- Handle requests for unknown customer IDs.
 
-## Additional use case: document ingestion
-This is an additional use case for the GenAI capstone preparation, where the chatbot will answer questions from ingested documents (RAG). It is separate from the customer lookup above and kept small.
+### FastAPI II — CRUD Operations and Document Management
 
-- `documents.json` holds three sample credit card product documents (Astra Travel Miles Platinum, Build+ Student & Starter and Everyday Max Cashback), one entry per document. There are no PDF files.
-- `documents.py` splits each document into overlapping character chunks (500 characters with 100 overlap), the same idea as the capstone's PDF chunking. Chunk IDs are `<document_id>-<chunk_index>`.
-- Search ranks chunks by how many query words they contain. This keyword score stands in for the vector similarity search a real RAG setup would use.
-- There are no embeddings and no vector database here.
+The second exercise extends the initial API by introducing Create, Read, Update, and Delete (CRUD) operations.
 
-Routes:
-- GET /documents (lists documents with their chunk counts)
-- GET /documents/search?q=...&top_k=3 (returns the best matching chunks with their source document and score)
+**Customer Management**
 
+- Create a customer.
+- Retrieve all customers, with optional value-tier filtering.
+- Retrieve a customer by ID.
+- Update customer information using PATCH.
+- Delete a customer by ID.
+
+**Document Management**
+
+- Create and retrieve documents.
+- Update document titles and text.
+- Delete documents.
+- Split documents into overlapping text chunks.
+- Search document chunks using keyword matching.
+- Return ranked search results with source document information.
+
+## Technology Stack
+
+- **Python** — Programming language
+- **FastAPI** — Web framework for building APIs
+- **Pydantic** — Request validation and data modeling
+- **Uvicorn** — ASGI server
+- **JSON** — Local data storage
+- **pytest** — Automated testing
+- **Requests** — HTTP client
+
+## Data Storage
+
+The project uses JSON files instead of a database.
+
+| File             | Description                           |
+| ---------------- | ------------------------------------- |
+| `customers.json` | Mock customer records                 |
+| `documents.json` | Sample credit card product documents  |
+| `.runtime/`      | Working copies of the JSON data files |
+
+The original JSON files serve as the initial data source. The application creates working copies inside the configured working directory and performs its operations on those copies.
+
+Configuration is managed through environment variables:
+
+| Variable             | Default            | Description                       |
+| -------------------- | ------------------ | --------------------------------- |
+| `DATABASE_LOCATION`  | `customers.json`   | Customer data source              |
+| `DOCUMENTS_LOCATION` | `documents.json`   | Document data source              |
+| `WORKING_DATA_DIR`   | `.runtime`         | Directory for working JSON copies |
+| `ENDPOINT_URL`       | `http://localhost` | API host                          |
+| `ENDPOINT_PORT`      | `8000`             | API port                          |
+
+## Project Structure
+
+```text
+fastapi-exercise-jericko/
+├── main.py              # FastAPI application and API routes
+├── documents.py         # Document chunking and keyword search
+├── storage.py           # JSON working-copy and persistence utilities
+├── customers.json       # Mock customer records
+├── documents.json       # Sample document records
+├── client.py            # Example HTTP client
+├── tests/
+│   ├── test_api.py      # Customer API tests
+│   └── test_documents.py # Document functionality tests
+├── pytest.ini           # pytest configuration
+├── requirements.txt     # Python dependencies
+├── .env.example         # Environment variable template
+└── README.md
 ```
+
+## Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd fastapi-exercise-jericko
+```
+
+### 2. Create a virtual environment
+
+```bash
+python -m venv .venv
+```
+
+### 3. Activate the virtual environment
+
+**Windows PowerShell:**
+
+```powershell
+.venv\Scripts\Activate.ps1
+```
+
+### 4. Install dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 5. Configure environment variables
+
+Copy `.env.example` to `.env`:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Adjust the values if necessary.
+
+### 6. Run the application
+
+```bash
+uvicorn main:app --reload --port 8000
+```
+
+The API will be available at:
+
+- API: [http://localhost:8000](http://localhost:8000)
+- Interactive Swagger documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
+- ReDoc documentation: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+
+## API Endpoints
+
+### Health Check
+
+| Method | Endpoint  | Description            |
+| ------ | --------- | ---------------------- |
+| GET    | `/health` | Check API availability |
+
+### Customer Endpoints
+
+| Method | Endpoint                     | Description                    | Expected Response |
+| ------ | ---------------------------- | ------------------------------ | ----------------- |
+| GET    | `/customers`                 | Retrieve all customers         | 200               |
+| GET    | `/customers?value_tier=High` | Filter customers by value tier | 200               |
+| GET    | `/customers/{customer_id}`   | Retrieve a customer by ID      | 200 / 404         |
+| POST   | `/customers`                 | Create a new customer          | 201               |
+| PATCH  | `/customers/{customer_id}`   | Update an existing customer    | 200 / 404         |
+| DELETE | `/customers/{customer_id}`   | Delete a customer              | 204 / 404         |
+
+### Document Endpoints
+
+| Method | Endpoint                              | Description                                |
+| ------ | ------------------------------------- | ------------------------------------------ |
+| GET    | `/documents`                          | Retrieve documents with their chunk counts |
+| GET    | `/documents/search?q={query}&top_k=3` | Search document chunks                     |
+| POST   | `/documents`                          | Create a document                          |
+| GET    | `/documents/{document_id}`            | Retrieve a document by ID                  |
+| PATCH  | `/documents/{document_id}`            | Update a document                          |
+| DELETE | `/documents/{document_id}`            | Delete a document                          |
+
+### HTTP Status Codes
+
+| Status Code              | Meaning                                    |
+| ------------------------ | ------------------------------------------ |
+| 200 OK                   | Request completed successfully             |
+| 201 Created              | Resource successfully created              |
+| 204 No Content           | Resource successfully deleted              |
+| 404 Not Found            | Requested resource does not exist          |
+| 409 Conflict             | Resource conflicts with an existing record |
+| 422 Unprocessable Entity | Request validation failed                  |
+
+## Document Search
+
+The document search functionality is a simplified implementation of the document retrieval process used in Retrieval-Augmented Generation (RAG).
+
+The process consists of:
+
+1. Loading documents from `documents.json`.
+2. Splitting document text into overlapping chunks.
+3. Tokenizing the search query and document chunks.
+4. Scoring chunks based on the number of matching query words.
+5. Returning the highest-ranking matching chunks.
+
+Default chunking configuration:
+
+- Chunk size: 500 characters
+- Chunk overlap: 100 characters
+
+**Note:** This implementation uses keyword matching rather than vector similarity. It does not generate embeddings or use a vector database.
+
+Example:
+
+```powershell
 curl.exe "http://localhost:8000/documents/search?q=lounge"
 ```
 
-The data file path comes from `DOCUMENTS_LOCATION` and defaults to `documents.json`.
+## Testing
 
-## Project Structure
-```
-fastapi-exercise-jericko/
-├── main.py            FastAPI app with the health and customer routes
-├── customers.json     Mock Gold customer records, keyed by customer_id
-├── documents.py       Chunking and keyword search for the document use case
-├── documents.json     Sample card product documents for the document use case
-├── client.py          Python client that calls the API with requests
-├── tests/
-│   ├── test_api.py        pytest tests for the customer routes
-│   └── test_documents.py  pytest tests for chunking, search and document routes
-├── pytest.ini         pytest settings (test folder, import path)
-├── requirements.txt   Pinned dependencies
-├── .env.example       Template for DATABASE_LOCATION, DOCUMENTS_LOCATION, ENDPOINT_URL, ENDPOINT_PORT
-└── README.md
-```
-Local only, not tracked: `.env`, `.venv/` and `.pytest_cache/`.
+Run the automated tests from the project root with the virtual environment activated:
 
-## Setup
-1. python -m venv .venv
-2. .venv\Scripts\Activate.ps1
-3. python -m pip install -r requirements.txt
-4. Copy .env.example to .env
-
-## Run
-```
-uvicorn main:app --reload --port 8000
-```
-Docs: http://localhost:8000/docs
-
-Routes:
-- GET /health
-- GET /customers (optional filter: ?value_tier=High|Medium|Standard)
-- GET /customers/{customer_id}
-
-The data file path comes from DATABASE_LOCATION and defaults to customers.json. All records are mock data.
-
-## Test
-Start the server first. In PowerShell use `curl.exe`, because `curl` is an alias for another command.
-
-Health check:
-```
-curl.exe http://localhost:8000/health
-```
-```
-{"status":"Healthy","message":"Service is Running"}
-```
-
-List customers filtered by value tier (returns customers 101 and 102):
-```
-curl.exe "http://localhost:8000/customers?value_tier=High"
-```
-
-One customer by ID:
-```
-curl.exe http://localhost:8000/customers/101
-```
-```
-{"customer_id":101,"source_system":"core","email":"customer101@example.com","first_name":"Ana","last_name":"Reyes","age":34,"phone":"+63-000-000-0101","city":"Quezon City","province":"Metro Manila","postal_code":"1100","country":"PH","created_at":"2014-03-12T08:30:00+08:00","tenure_years":12.7,"tenure_category":"Long Term","kyc_level":"Full","tier":"Premier","segment":"Retail","status":"Active","marketing_opt_in":true,"total_relationship_balance":2450000.5,"average_daily_balance":1980000.25,"value_tier":"High","completeness_score":100.0,"as_of_date":"2026-11-23"}
-```
-
-Missing customer:
-```
-curl.exe http://localhost:8000/customers/999
-```
-```
-{"detail":"Customer not found"}
-```
-
-## Automated tests
-Install the test dependencies once, then run pytest from the repo root with `.venv` active:
-```
+```bash
 python -m pip install pytest httpx
 python -m pytest
 ```
-The tests call the routes through FastAPI's `TestClient`, so the server does not need to be running. `tests/test_api.py` covers the health route, the customer list and its `value_tier` filter (including case and unknown values), lookup by ID, the 404 for a missing customer and the 422 for a non-integer ID. `tests/test_documents.py` covers chunking, search ranking and the document routes.
 
-## Python client
-With the server running, in a second terminal with `.venv` active:
-```
+The tests use FastAPI's `TestClient`, so the application server does not need to be running separately.
+
+## Python HTTP Client
+
+The repository includes `client.py`, which demonstrates how to send HTTP requests to the API using the Requests library.
+
+With the API running, execute:
+
+```bash
 python client.py
 ```
-It calls `/health`, `/customers?value_tier=High`, `/customers/101`, `/customers/999`, `/documents` and `/documents/search?q=lounge`, and prints the status code and JSON for each. The base URL comes from `ENDPOINT_URL` and `ENDPOINT_PORT`, defaulting to `http://localhost` and `8000`.
+
+The example client demonstrates calls to the health, customer lookup, and document retrieval/search endpoints.
+
+## Notes and Limitations  Customer and document records are mock data.
+
+- JSON files are used instead of a relational database.
+- Changes are written to working copies rather than the original JSON files.
+- Document search uses keyword matching, not embeddings or vector search.
+- The document ingestion example is separate from the customer lookup functionality.
+- The API is intended for learning and exercise purposes, not production deployment.
