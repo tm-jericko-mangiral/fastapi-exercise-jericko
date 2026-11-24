@@ -123,3 +123,67 @@ def tokenize(text):
     :return: Set of lowercase words.
     """
     return set(re.findall(r"\w+", text.lower()))
+
+
+def make_document_id(title):
+    """Turn a title into a lowercase, hyphenated document ID.
+
+    A plus sign is spelled out, as in build-plus-student-starter.
+
+    :param title: Title of the document.
+    :return: ID made of lowercase letters, digits and hyphens.
+    """
+    spelled_out = title.lower().replace("+", " plus ")
+    return re.sub(r"[^a-z0-9]+", "-", spelled_out).strip("-")
+
+
+def find_document(documents, document_id):
+    """Look up one document by its ID.
+
+    :param documents: Documents with document_id.
+    :param document_id: ID to look for.
+    :return: The document, or None when the ID is unknown.
+    """
+    return next(
+        (
+            document
+            for document in documents
+            if document["document_id"] == document_id
+        ),
+        None,
+    )
+
+
+def has_duplicate(documents, title, document_id):
+    """Check whether a title or an ID is already taken.
+
+    Titles are compared ignoring case.
+
+    :param documents: Documents with document_id and title.
+    :param title: Title to check.
+    :param document_id: ID to check.
+    :return: True when a document has the same title or the same ID.
+    """
+    return any(
+        document["document_id"] == document_id
+        or document["title"].casefold() == title.casefold()
+        for document in documents
+    )
+
+
+def is_title_used_by_other(documents, title, document_id):
+    """Check whether a different document already has this title.
+
+    Titles are compared ignoring case. The document being changed is skipped,
+    so it can keep its title or only change the case.
+
+    :param documents: Documents with document_id and title.
+    :param title: Title to check.
+    :param document_id: ID of the document being changed.
+    :return: True when another document has the same title.
+    """
+    return any(
+        document["document_id"] != document_id
+        and document["title"].casefold() == title.casefold()
+        for document in documents
+    )

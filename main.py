@@ -1,22 +1,170 @@
+import itertools
 import json
+import math
 import os
-from pathlib import Path
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import FastAPI, HTTPException, Query, Request, status
+from fastapi.exception_handlers import request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    StrictInt,
+    StringConstraints,
+    model_validator,
+)
 
 from documents import (
     build_chunks,
+    find_document,
+    has_duplicate,
+    is_title_used_by_other,
     load_documents,
+    make_document_id,
     search_chunks,
     summarize_documents,
 )
+from storage import prepare_working_copy, write_json
 
-CUSTOMERS_PATH = Path(os.environ.get("DATABASE_LOCATION", "customers.json"))
-DOCUMENTS_PATH = Path(os.environ.get("DOCUMENTS_LOCATION", "documents.json"))
+CUSTOMERS_PATH = prepare_working_copy(
+    os.environ.get("DATABASE_LOCATION", "customers.json")
+)
+DOCUMENTS_PATH = prepare_working_copy(
+    os.environ.get("DOCUMENTS_LOCATION", "documents.json")
+)
 DEFAULT_TOP_K = 3
 MIN_TOP_K = 1
+MAX_AGE = 120
+MAX_COMPLETENESS_SCORE = 100
+
+DocumentTitle = Annotated[
+    str, StringConstraints(strip_whitespace=True, pattern=r"[A-Za-z0-9]")
+]
+DocumentText = Annotated[str, StringConstraints(pattern=r"\S")]
+RequiredText = Annotated[
+    str, StringConstraints(strip_whitespace=True, min_length=1)
+]
+EmailAddress = Annotated[
+    str,
+    StringConstraints(
+        strip_whitespace=True, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    ),
+]
+NonNegativeNumber = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+CompletenessScore = Annotated[
+    float,
+    Field(ge=0, le=MAX_COMPLETENESS_SCORE, allow_inf_nan=False),
+]
+Age = Annotated[StrictInt, Field(ge=0, le=MAX_AGE)]
+ValueTier = Literal["High", "Medium", "Standard"]
 
 app = FastAPI()
+
+
+class NewDocument(BaseModel):
+    """Request body for creating a document."""
+
+    title: DocumentTitle
+    text: DocumentText
+
+
+class DocumentChanges(BaseModel):
+    """Request body for changing a document.
+
+    Only title and text are accepted, and at least one must be sent.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: DocumentTitle | None = None
+    text: DocumentText | None = None
+
+    @model_validator(mode="after")
+    def require_a_value_to_change(self):
+        """Reject an empty body and null values."""
+        changes = self.model_dump(exclude_unset=True)
+        if not changes or None in changes.values():
+            raise ValueError("Send title, text or both, each with a value")
+        return self
+
+
+class NewCustomer(BaseModel):
+    """Request body for creating a customer.
+
+    Every field is required. The server sets customer_id and as_of_date, so
+    sending them, or any other unknown field, is rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_system: RequiredText
+    email: EmailAddress
+    first_name: RequiredText
+    last_name: RequiredText
+    age: Age
+    phone: RequiredText
+    city: RequiredText
+    province: RequiredText
+    postal_code: RequiredText
+    country: RequiredText
+    created_at: datetime
+    tenure_years: NonNegativeNumber
+    tenure_category: RequiredText
+    kyc_level: RequiredText
+    tier: RequiredText
+    segment: RequiredText
+    status: RequiredText
+    marketing_opt_in: StrictBool
+    total_relationship_balance: NonNegativeNumber
+    average_daily_balance: NonNegativeNumber
+    value_tier: ValueTier
+    completeness_score: CompletenessScore
+
+
+class CustomerChanges(BaseModel):
+    """Request body for changing a customer.
+
+    Every field is optional and has the same rules as when creating, but at
+    least one must be sent. customer_id, as_of_date and unknown fields are
+    rejected.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_system: RequiredText | None = None
+    email: EmailAddress | None = None
+    first_name: RequiredText | None = None
+    last_name: RequiredText | None = None
+    age: Age | None = None
+    phone: RequiredText | None = None
+    city: RequiredText | None = None
+    province: RequiredText | None = None
+    postal_code: RequiredText | None = None
+    country: RequiredText | None = None
+    created_at: datetime | None = None
+    tenure_years: NonNegativeNumber | None = None
+    tenure_category: RequiredText | None = None
+    kyc_level: RequiredText | None = None
+    tier: RequiredText | None = None
+    segment: RequiredText | None = None
+    status: RequiredText | None = None
+    marketing_opt_in: StrictBool | None = None
+    total_relationship_balance: NonNegativeNumber | None = None
+    average_daily_balance: NonNegativeNumber | None = None
+    value_tier: ValueTier | None = None
+    completeness_score: CompletenessScore | None = None
+
+    @model_validator(mode="after")
+    def require_a_value_to_change(self):
+        """Reject an empty body and null values."""
+        changes = self.model_dump(exclude_unset=True)
+        if not changes or None in changes.values():
+            raise ValueError("Send at least one field, each with a value")
+        return self
 
 
 @app.get("/health")
@@ -55,6 +203,76 @@ def get_customer(customer_id: int):
     return customer
 
 
+@app.post("/customers", status_code=status.HTTP_201_CREATED)
+def add_customer(payload: NewCustomer):
+    """Create a customer and save the working copy.
+
+    The server sets customer_id (the next unused ID) and as_of_date (today).
+
+    :param payload: Customer fields supplied by the client.
+    :return: The new customer record.
+    :raises HTTPException: 409 when another customer has the same email.
+    """
+    if is_email_taken(CUSTOMERS.values(), payload.email):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Customer with email '{payload.email}' already exists",
+        )
+    customer_id = next(NEW_CUSTOMER_IDS)
+    customer = {
+        "customer_id": customer_id,
+        **payload.model_dump(mode="json"),
+        "as_of_date": date.today().isoformat(),
+    }
+    CUSTOMERS[customer_id] = customer
+    save_customers()
+    return customer
+
+
+@app.patch("/customers/{customer_id}")
+def change_customer(customer_id: int, payload: CustomerChanges):
+    """Change one or more fields of a customer and save the working copy.
+
+    customer_id and as_of_date stay as they are.
+
+    :param customer_id: Integer ID of the customer.
+    :param payload: Fields to change.
+    :return: The updated customer record.
+    :raises HTTPException: 404 when the customer does not exist, 409 when
+        another customer already has the new email.
+    """
+    customer = CUSTOMERS.get(customer_id)
+    if customer is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    changes = payload.model_dump(mode="json", exclude_unset=True)
+    new_email = changes.get("email")
+    if new_email and is_email_taken(
+        CUSTOMERS.values(), new_email, ignore_customer_id=customer_id
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Customer with email '{new_email}' already exists",
+        )
+    customer.update(changes)
+    save_customers()
+    return customer
+
+
+@app.delete(
+    "/customers/{customer_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_customer(customer_id: int):
+    """Delete a customer and save the working copy.
+
+    :param customer_id: Integer ID of the customer.
+    :raises HTTPException: 404 when the customer does not exist.
+    """
+    if customer_id not in CUSTOMERS:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Customer not found")
+    del CUSTOMERS[customer_id]
+    save_customers()
+
+
 @app.get("/documents")
 def get_documents():
     """List the documents with their chunk counts."""
@@ -72,6 +290,102 @@ def search_documents(q: str, top_k: int = Query(DEFAULT_TOP_K, ge=MIN_TOP_K)):
     return search_chunks(CHUNKS, q, top_k)
 
 
+@app.post("/documents", status_code=status.HTTP_201_CREATED)
+def add_document(payload: NewDocument):
+    """Create a document and rebuild the chunks.
+
+    :param payload: Title and text of the new document.
+    :return: The new document's ID, title and chunk count.
+    :raises HTTPException: 409 when the title or the generated ID is taken.
+    """
+    document_id = make_document_id(payload.title)
+    if has_duplicate(DOCUMENTS, payload.title, document_id):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Document '{payload.title}' already exists",
+        )
+    document = {"document_id": document_id, **payload.model_dump()}
+    DOCUMENTS.append(document)
+    save_documents_and_rebuild_chunks()
+    return summarize_documents([document], CHUNKS)[0]
+
+
+@app.get("/documents/{document_id}")
+def get_document(document_id: str):
+    """Return one document with its text.
+
+    :param document_id: ID of the document.
+    :return: The document record.
+    :raises HTTPException: 404 when the document does not exist.
+    """
+    document = find_document(DOCUMENTS, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    return document
+
+
+@app.patch("/documents/{document_id}")
+def change_document(document_id: str, payload: DocumentChanges):
+    """Change the title, the text or both of a document.
+
+    The document ID stays the same. The chunks are rebuilt.
+
+    :param document_id: ID of the document.
+    :param payload: New title and/or new text.
+    :return: The document's ID, title and chunk count.
+    :raises HTTPException: 404 when the document does not exist, 409 when
+        another document already has the new title.
+    """
+    document = find_document(DOCUMENTS, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    changes = payload.model_dump(exclude_unset=True)
+    new_title = changes.get("title")
+    if new_title and is_title_used_by_other(
+        DOCUMENTS, new_title, document_id
+    ):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Document '{new_title}' already exists",
+        )
+    document.update(changes)
+    save_documents_and_rebuild_chunks()
+    return summarize_documents([document], CHUNKS)[0]
+
+
+@app.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(document_id: str):
+    """Delete a document and rebuild the chunks.
+
+    :param document_id: ID of the document.
+    :raises HTTPException: 404 when the document does not exist.
+    """
+    document = find_document(DOCUMENTS, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    DOCUMENTS.remove(document)
+    save_documents_and_rebuild_chunks()
+
+
+@app.exception_handler(RequestValidationError)
+async def handle_validation_error(
+    request: Request, exc: RequestValidationError
+):
+    """Return the usual 422 response, also for NaN and Infinity in a body.
+
+    FastAPI's own handler fails with a 500 when a rejected body held NaN or
+    Infinity, because the error repeats that value and JSON cannot carry it.
+
+    :param request: The rejected request.
+    :param exc: The validation errors.
+    :return: The 422 response with the errors.
+    """
+    cleaned = RequestValidationError(
+        replace_non_finite(exc.errors()), body=exc.body
+    )
+    return await request_validation_exception_handler(request, cleaned)
+
+
 def filter_by_value_tier(customers, value_tier):
     """Keep the customers whose value tier matches, ignoring case.
 
@@ -84,6 +398,24 @@ def filter_by_value_tier(customers, value_tier):
         for customer in customers
         if customer["value_tier"].lower() == value_tier.lower()
     ]
+
+
+def is_email_taken(customers, email, ignore_customer_id=None):
+    """Check whether a customer already has this email.
+
+    Emails are compared ignoring case.
+
+    :param customers: Customer records.
+    :param email: Email to check.
+    :param ignore_customer_id: ID of a customer to skip, such as the one
+        being changed, so they can keep their own email.
+    :return: True when another customer has the same email.
+    """
+    return any(
+        customer["email"].casefold() == email.casefold()
+        and customer["customer_id"] != ignore_customer_id
+        for customer in customers
+    )
 
 
 def load_customers():
@@ -99,6 +431,39 @@ def load_customers():
     }
 
 
+def replace_non_finite(value):
+    """Replace NaN and Infinity with text, at any depth.
+
+    :param value: Number, list, tuple, dict or any other value.
+    :return: The same structure with every non-finite float as a string.
+    """
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: replace_non_finite(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [replace_non_finite(item) for item in value]
+    return value
+
+
+def save_customers():
+    """Write the customers to the working copy, keyed by customer_id."""
+    write_json(
+        CUSTOMERS_PATH,
+        {
+            str(customer_id): customer
+            for customer_id, customer in CUSTOMERS.items()
+        },
+    )
+
+
+def save_documents_and_rebuild_chunks():
+    """Write the documents to the working copy and rebuild the chunks."""
+    write_json(DOCUMENTS_PATH, DOCUMENTS)
+    CHUNKS[:] = build_chunks(DOCUMENTS)
+
+
 CUSTOMERS = load_customers()
+NEW_CUSTOMER_IDS = itertools.count(max(CUSTOMERS, default=0) + 1)
 DOCUMENTS = load_documents(DOCUMENTS_PATH)
 CHUNKS = build_chunks(DOCUMENTS)
