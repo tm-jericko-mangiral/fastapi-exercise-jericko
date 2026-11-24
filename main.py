@@ -177,6 +177,20 @@ def change_document(document_id: str, payload: DocumentChanges):
     return summarize_documents([document], CHUNKS)[0]
 
 
+@app.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_document(document_id: str):
+    """Delete a document and rebuild the chunks.
+
+    :param document_id: ID of the document.
+    :raises HTTPException: 404 when the document does not exist.
+    """
+    document = find_document(DOCUMENTS, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    DOCUMENTS.remove(document)
+    save_documents_and_rebuild_chunks()
+
+
 def filter_by_value_tier(customers, value_tier):
     """Keep the customers whose value tier matches, ignoring case.
 
