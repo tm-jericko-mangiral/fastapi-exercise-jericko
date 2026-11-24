@@ -1,3 +1,5 @@
+# fastapi-II-exercise-jericko
+
 # fastapi-exercise-jericko
 
 Gold customer lookup API built with FastAPI, for the EC bootcamp FastAPI lab.
